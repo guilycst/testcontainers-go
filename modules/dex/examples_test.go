@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/guilycst/testcontainers-go/modules/dex"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/dex"
 	"golang.org/x/oauth2"
 )
 
