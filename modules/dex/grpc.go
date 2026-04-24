@@ -17,8 +17,8 @@ import (
 // custom grants, register the client pre-start via WithClient.
 //
 // Not safe for concurrent use.
-func (c *DexContainer) AddClient(ctx context.Context, cl Client) error {
-	target, err := c.grpcEndpoint(ctx)
+func (c *Container) AddClient(ctx context.Context, cl Client) error {
+	target, err := c.GRPCEndpoint(ctx)
 	if err != nil {
 		return err
 	}
@@ -30,18 +30,18 @@ func (c *DexContainer) AddClient(ctx context.Context, cl Client) error {
 
 	resp, err := api.NewDexClient(conn).CreateClient(ctx, &api.CreateClientReq{
 		Client: &api.Client{
-			Id:           cl.ID,
-			Secret:       cl.Secret,
-			RedirectUris: cl.RedirectURIs,
-			Name:         cl.Name,
-			Public:       cl.Public,
+			Id:           cl.id,
+			Secret:       cl.secret,
+			RedirectUris: cl.redirectURIs,
+			Name:         cl.name,
+			Public:       cl.public,
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("dex: create client: %w", err)
 	}
 	if resp.AlreadyExists {
-		return ErrClientExists
+		return fmt.Errorf("%w: %q", ErrClientExists, cl.id)
 	}
 	return nil
 }
@@ -49,8 +49,8 @@ func (c *DexContainer) AddClient(ctx context.Context, cl Client) error {
 // RemoveClient deletes a client by ID.
 //
 // Not safe for concurrent use.
-func (c *DexContainer) RemoveClient(ctx context.Context, id string) error {
-	target, err := c.grpcEndpoint(ctx)
+func (c *Container) RemoveClient(ctx context.Context, id string) error {
+	target, err := c.GRPCEndpoint(ctx)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (c *DexContainer) RemoveClient(ctx context.Context, id string) error {
 		return fmt.Errorf("dex: delete client: %w", err)
 	}
 	if resp.NotFound {
-		return fmt.Errorf("dex: client %q not found", id)
+		return fmt.Errorf("%w: %q", ErrClientNotFound, id)
 	}
 	return nil
 }
@@ -73,8 +73,8 @@ func (c *DexContainer) RemoveClient(ctx context.Context, id string) error {
 // AddUser registers a user in Dex's password DB via gRPC.
 //
 // Not safe for concurrent use.
-func (c *DexContainer) AddUser(ctx context.Context, u User) error {
-	target, err := c.grpcEndpoint(ctx)
+func (c *Container) AddUser(ctx context.Context, u User) error {
+	target, err := c.GRPCEndpoint(ctx)
 	if err != nil {
 		return err
 	}
@@ -84,20 +84,24 @@ func (c *DexContainer) AddUser(ctx context.Context, u User) error {
 	}
 	defer conn.Close()
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(u.password), testBcryptCost)
 	if err != nil {
 		return fmt.Errorf("dex: bcrypt: %w", err)
 	}
-	userID := u.UserID
+	userID := u.userID
 	if userID == "" {
-		userID = newUUIDv4()
+		uid, uidErr := newUUIDv4()
+		if uidErr != nil {
+			return fmt.Errorf("dex: generate user id: %w", uidErr)
+		}
+		userID = uid
 	}
 
 	resp, err := api.NewDexClient(conn).CreatePassword(ctx, &api.CreatePasswordReq{
 		Password: &api.Password{
-			Email:    u.Email,
+			Email:    u.email,
 			Hash:     hash,
-			Username: u.Username,
+			Username: u.username,
 			UserId:   userID,
 		},
 	})
@@ -105,7 +109,7 @@ func (c *DexContainer) AddUser(ctx context.Context, u User) error {
 		return fmt.Errorf("dex: create password: %w", err)
 	}
 	if resp.AlreadyExists {
-		return ErrUserExists
+		return fmt.Errorf("%w: %q", ErrUserExists, u.email)
 	}
 	return nil
 }
@@ -113,8 +117,8 @@ func (c *DexContainer) AddUser(ctx context.Context, u User) error {
 // RemoveUser deletes a user by email.
 //
 // Not safe for concurrent use.
-func (c *DexContainer) RemoveUser(ctx context.Context, email string) error {
-	target, err := c.grpcEndpoint(ctx)
+func (c *Container) RemoveUser(ctx context.Context, email string) error {
+	target, err := c.GRPCEndpoint(ctx)
 	if err != nil {
 		return err
 	}
@@ -129,7 +133,7 @@ func (c *DexContainer) RemoveUser(ctx context.Context, email string) error {
 		return fmt.Errorf("dex: delete password: %w", err)
 	}
 	if resp.NotFound {
-		return fmt.Errorf("dex: user %q not found", email)
+		return fmt.Errorf("%w: %q", ErrUserNotFound, email)
 	}
 	return nil
 }
